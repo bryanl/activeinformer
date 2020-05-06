@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-logr/stdr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/bryanl/activeinformer/pkg/activeinformer"
+	"github.com/bryanl/activeinformer/pkg/kubernetes"
 )
 
 func main() {
@@ -40,7 +42,9 @@ func run() error {
 		return fmt.Errorf("get resources: %w", err)
 	}
 
-	informer := activeinformer.NewInformer(client)
+	stdLog := log.New(os.Stderr, "", log.LstdFlags)
+	informer := activeinformer.NewInformer(client, activeinformer.WithLogger(stdr.New(stdLog)))
+
 	if err := informer.Start(ctx); err != nil {
 		return fmt.Errorf("start informer: %w", err)
 	}
@@ -63,7 +67,7 @@ func run() error {
 	return nil
 }
 
-func getResources(client activeinformer.Client) (activeinformer.Resources, error) {
+func getResources(client kubernetes.Client) (activeinformer.Resources, error) {
 	var resources activeinformer.Resources
 
 	if err := timeIt(func() error {
@@ -87,7 +91,7 @@ func getPods(ctx context.Context, informer activeinformer.Informer, resources ac
 		return fmt.Errorf("there was no pod resource")
 	}
 
-	podList, err := informer.List(ctx, podResource.GroupVersionResource(), activeinformer.ListOption{})
+	podList, err := informer.List(ctx, podResource.GroupVersionResource(), kubernetes.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("list pods: %w", err)
 	}

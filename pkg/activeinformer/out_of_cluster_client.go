@@ -8,23 +8,14 @@ import (
 	"time"
 
 	"go.uber.org/multierr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery/cached/disk"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"github.com/bryanl/activeinformer/pkg/kubernetes"
 )
-
-// Client represents a Kubernetes cluster client.
-type Client interface {
-	List(ctx context.Context, res schema.GroupVersionResource, options ListOption) (*unstructured.UnstructuredList, error)
-	Watch(ctx context.Context, res schema.GroupVersionResource, options ListOption) (watch.Interface, error)
-	Resources() (Resources, error)
-}
 
 // OutOfClusterClient is a client that be used out of cluster.
 type OutOfClusterClient struct {
@@ -33,7 +24,7 @@ type OutOfClusterClient struct {
 	discoveryClient *disk.CachedDiscoveryClient
 }
 
-var _ Client = &OutOfClusterClient{}
+var _ kubernetes.Client = &OutOfClusterClient{}
 
 // NewOutOfClusterClient creates an instance of OutOfClusterClient.
 func NewOutOfClusterClient(kubeconfig string) (*OutOfClusterClient, error) {
@@ -85,13 +76,13 @@ func (c *OutOfClusterClient) Close() error {
 }
 
 // Resources lists the resources available in the cluster.
-func (c *OutOfClusterClient) Resources() (Resources, error) {
+func (c *OutOfClusterClient) Resources() (kubernetes.Resources, error) {
 	resourceLists, err := c.discoveryClient.ServerPreferredResources()
 	if err != nil {
 		return nil, fmt.Errorf("get server preferred resources: %w", err)
 	}
 
-	var list Resources
+	var list kubernetes.Resources
 
 	for _, resourceList := range resourceLists {
 		groupVersion, err := schema.ParseGroupVersion(resourceList.GroupVersion)
@@ -107,19 +98,11 @@ func (c *OutOfClusterClient) Resources() (Resources, error) {
 	return list, nil
 }
 
-// ListOption wraps metav1.ListOption and adds a Namespace key.
-type ListOption struct {
-	metav1.ListOptions
-
-	// Namespace is the namespace to scope the returned objects.
-	Namespace string
-}
-
 // List lists objects in the cluster.
 func (c *OutOfClusterClient) List(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options ListOption) (*unstructured.UnstructuredList, error) {
+	options kubernetes.ListOptions) (*unstructured.UnstructuredList, error) {
 	if options.Namespace == "" {
 		return c.client.Resource(res).List(ctx, options.ListOptions)
 	}
@@ -131,7 +114,7 @@ func (c *OutOfClusterClient) List(
 func (c *OutOfClusterClient) Watch(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options ListOption) (watch.Interface, error) {
+	options kubernetes.ListOptions) (kubernetes.Watch, error) {
 	if options.Namespace == "" {
 		return c.client.Resource(res).Watch(ctx, options.ListOptions)
 	}

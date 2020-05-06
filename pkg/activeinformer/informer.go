@@ -3,11 +3,10 @@ package activeinformer
 import (
 	"context"
 	"fmt"
-	"log"
 	"runtime"
 	"sync"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -15,7 +14,13 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/bryanl/activeinformer/internal/stringutil"
+	"github.com/bryanl/activeinformer/pkg/kubernetes"
 )
+
+type watchDescriptor struct {
+	watch   *UpdatableWatcher
+	options kubernetes.ListOptions
+}
 
 // Informer represents a cluster MemoryStoreInformer.
 // NOTE: this is a poor name. It's a client as well (sans the resources)
@@ -26,32 +31,43 @@ type Informer interface {
 	Stop() error
 	// List list objects from the memory store and falls back to querying the
 	// cluster directly if the resource is not synced.
-	List(ctx context.Context, res schema.GroupVersionResource, options ListOption) (*unstructured.UnstructuredList, error)
+	List(ctx context.Context, res schema.GroupVersionResource, options kubernetes.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 // MemoryStoreInformer is an informer that uses a memory store.
 type MemoryStoreInformer struct {
-	client  Client
-	synced  map[schema.GroupVersionResource]bool
-	watches map[schema.GroupVersionResource]watch.Interface
-	store   Store
+	client           kubernetes.Client
+	synced           map[schema.GroupVersionResource]bool
+	apiWatches       map[schema.GroupVersionResource]kubernetes.Watch
+	watchDescriptors map[schema.GroupVersionResource]watchDescriptor
+	store            kubernetes.Store
+	logger           logr.Logger
 
 	mu  sync.RWMutex
 	sem *semaphore.Weighted
 }
 
 var _ Informer = &MemoryStoreInformer{}
+var _ kubernetes.Client = &MemoryStoreInformer{}
 
 // NewInformer creates an MemoryStoreInformer.
-func NewInformer(client Client) *MemoryStoreInformer {
+func NewInformer(client kubernetes.Client, optionList ...Option) *MemoryStoreInformer {
+	opts := currentOptions(optionList...)
+
 	maxWorkers := runtime.GOMAXPROCS(0)
 
 	i := MemoryStoreInformer{
-		client:  client,
-		synced:  map[schema.GroupVersionResource]bool{},
-		watches: map[schema.GroupVersionResource]watch.Interface{},
-		store:   NewMemoryStore(),
-		sem:     semaphore.NewWeighted(int64(maxWorkers)),
+		client:           client,
+		synced:           map[schema.GroupVersionResource]bool{},
+		apiWatches:       map[schema.GroupVersionResource]kubernetes.Watch{},
+		watchDescriptors: map[schema.GroupVersionResource]watchDescriptor{},
+		store:            opts.store,
+		logger:           opts.logger.WithValues("component", "MemoryStoreInformer"),
+		sem:              semaphore.NewWeighted(int64(maxWorkers)),
+	}
+
+	if i.store == nil {
+		i.store = NewMemoryStore(WithLogger(opts.logger))
 	}
 
 	return &i
@@ -88,7 +104,9 @@ func (inf *MemoryStoreInformer) Start(ctx context.Context) error {
 			}
 
 			go inf.handleWatch(res, w)
-			inf.setSynced(res, w)
+			if err := inf.SetSynced(res, w); err != nil {
+				return fmt.Errorf("sync watc %s: %w", res.String(), err)
+			}
 
 			return nil
 		})
@@ -106,11 +124,13 @@ func (inf *MemoryStoreInformer) Stop() error {
 	inf.mu.Lock()
 	defer inf.mu.Unlock()
 
+	inf.logger.Info("stopping")
+
 	for k := range inf.synced {
 		delete(inf.synced, k)
 	}
 
-	for k, w := range inf.watches {
+	for k, w := range inf.apiWatches {
 		w.Stop()
 		delete(inf.synced, k)
 	}
@@ -123,30 +143,95 @@ func (inf *MemoryStoreInformer) Stop() error {
 func (inf *MemoryStoreInformer) List(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options ListOption) (*unstructured.UnstructuredList, error) {
+	options kubernetes.ListOptions) (*unstructured.UnstructuredList, error) {
 
 	inf.mu.RLock()
 	defer inf.mu.RUnlock()
 
-	if !inf.synced[res] {
-		log.Printf("listing using client")
+	logger := inf.logger.WithValues("res", res)
+
+	if !inf.isResourceSynced(res) {
+		logger.Info("listing using client")
 		return inf.client.List(ctx, res, options)
 	}
 
-	log.Printf("listing using store")
+	logger.Info("listing using store")
 	return inf.store.List(res, options)
 }
 
-func (inf *MemoryStoreInformer) setSynced(res schema.GroupVersionResource, watch watch.Interface) {
+func (inf *MemoryStoreInformer) Watch(
+	ctx context.Context,
+	res schema.GroupVersionResource,
+	options kubernetes.ListOptions) (kubernetes.Watch, error) {
+	var w kubernetes.Watch
+
+	if !inf.isResourceSynced(res) {
+		clientWatch, err := inf.client.Watch(ctx, res, options)
+		if err != nil {
+			return nil, fmt.Errorf("create watch: %w", err)
+		}
+
+		w = clientWatch
+	}
+
+	if w == nil {
+		storeWatcher, err := inf.store.Watch(res, options)
+		if err != nil {
+			return nil, fmt.Errorf("create store watcher: %w", err)
+		}
+
+		w = storeWatcher
+	}
+
+	inf.mu.Lock()
+	updatableWatcher := NewUpdatableWatcher(w)
+	inf.watchDescriptors[res] = watchDescriptor{
+		watch:   updatableWatcher,
+		options: options,
+	}
+	inf.mu.Unlock()
+
+	return updatableWatcher, nil
+}
+
+func (inf *MemoryStoreInformer) Resources() (kubernetes.Resources, error) {
+	return inf.client.Resources()
+}
+
+func (inf *MemoryStoreInformer) isResourceSynced(res schema.GroupVersionResource) bool {
+	return inf.synced[res]
+}
+
+func (inf *MemoryStoreInformer) SetSynced(res schema.GroupVersionResource, apiWatch kubernetes.Watch) error {
 	inf.mu.Lock()
 	defer inf.mu.Unlock()
 
 	inf.synced[res] = true
-	inf.watches[res] = watch
+	inf.apiWatches[res] = apiWatch
+
+	wd, ok := inf.watchDescriptors[res]
+	if ok {
+		// there was a watch created before the resource was synced
+
+		// create a new watch from the store.
+		storeWatcher, err := inf.store.Watch(res, wd.options)
+		if err != nil {
+			return fmt.Errorf("create store watcher: %w", err)
+		}
+
+		delete(inf.watchDescriptors, res)
+
+		// set the existing watch
+		wd.watch.SetSource(storeWatcher)
+	}
+
+	return nil
 }
 
-func (inf *MemoryStoreInformer) setupWatch(ctx context.Context, res schema.GroupVersionResource) (watch.Interface, error) {
-	list, err := inf.client.List(ctx, res, ListOption{})
+func (inf *MemoryStoreInformer) setupWatch(
+	ctx context.Context,
+	res schema.GroupVersionResource) (kubernetes.Watch, error) {
+	list, err := inf.client.List(ctx, res, kubernetes.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
 	}
@@ -155,7 +240,7 @@ func (inf *MemoryStoreInformer) setupWatch(ctx context.Context, res schema.Group
 		inf.store.Update(res, &object)
 	}
 
-	w, err := inf.client.Watch(ctx, res, ListOption{})
+	w, err := inf.client.Watch(ctx, res, kubernetes.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("watch: %w", err)
 	}
@@ -163,19 +248,19 @@ func (inf *MemoryStoreInformer) setupWatch(ctx context.Context, res schema.Group
 	return w, nil
 }
 
-func (inf *MemoryStoreInformer) handleWatch(res schema.GroupVersionResource, w watch.Interface) {
+func (inf *MemoryStoreInformer) handleWatch(res schema.GroupVersionResource, w kubernetes.Watch) {
 	for event := range w.ResultChan() {
 		switch event.Type {
-		case watch.Added:
-			inf.store.Update(res, event.Object)
-		case watch.Modified:
+		case watch.Added, watch.Modified:
 			inf.store.Update(res, event.Object)
 		case watch.Deleted:
 			inf.store.Delete(res, event.Object)
 		default:
-			log.Printf("watch for %s doesn't handle %s: %v",
-				res.String(), event.Type, spew.Sdump(event.Object))
+			inf.logger.Info("unknown watch event type",
+				"event-type", event.Type,
+				"event", event.Object)
 		}
 	}
-	log.Printf("watch for %s is ending", res.String())
+
+	inf.logger.Info("watch is ending", "res", res)
 }
