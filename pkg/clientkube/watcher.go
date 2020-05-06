@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"k8s.io/apimachinery/pkg/watch"

@@ -1,8 +1,9 @@
-module github.com/bryanl/activeinformer
+module github.com/bryanl/clientkube
 
 go 1.14
 
 require (
+	github.com/bryanl/activeinformer v0.0.0-20200503190126-133132874a2c
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/stdr v0.0.0-20190808155957-db4f46c40425

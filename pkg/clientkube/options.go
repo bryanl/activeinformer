@@ -1,15 +1,15 @@
-package activeinformer
+package clientkube
 
 import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testing"
 
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 type options struct {
 	logger logr.Logger
-	store  kubernetes.Store
+	store  cluster.Store
 }
 
 func currentOptions(list ...Option) options {
@@ -32,7 +32,7 @@ func WithLogger(logger logr.Logger) Option {
 	}
 }
 
-func WithStore(store kubernetes.Store) Option {
+func WithStore(store cluster.Store) Option {
 	return func(o *options) {
 		o.store = store
 	}

@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
-	"github.com/bryanl/activeinformer/pkg/mocks"
+	"github.com/bryanl/clientkube/pkg/cluster"
+	"github.com/bryanl/clientkube/pkg/mocks"
 )
 
 func TestMemoryStoreInformer_Watch(t *testing.T) {
@@ -27,30 +27,30 @@ func TestMemoryStoreInformer_Watch(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		options      func(ctrl *gomock.Controller, options kubernetes.ListOptions) []Option
+		options      func(ctrl *gomock.Controller, options cluster.ListOptions) []Option
 		withInformer func(informer *MemoryStoreInformer)
-		listOptions  kubernetes.ListOptions
-		initClient   func(ctrl *gomock.Controller, options kubernetes.ListOptions) kubernetes.Client
+		listOptions  cluster.ListOptions
+		initClient   func(ctrl *gomock.Controller, options cluster.ListOptions) cluster.Client
 	}{
 		{
 			name: "watch for unsynced resource uses client for watch",
-			options: func(ctrl *gomock.Controller, options kubernetes.ListOptions) []Option {
+			options: func(ctrl *gomock.Controller, options cluster.ListOptions) []Option {
 				return []Option{
 					loggerOption,
 				}
 			},
-			initClient: func(ctrl *gomock.Controller, options kubernetes.ListOptions) kubernetes.Client {
+			initClient: func(ctrl *gomock.Controller, options cluster.ListOptions) cluster.Client {
 				w := mocks.NewMockWatch(ctrl)
 				client := mocks.NewMockClient(ctrl)
 				client.EXPECT().Watch(gomock.Any(), res, options).Return(w, nil)
 
 				return client
 			},
-			listOptions: kubernetes.ListOptions{},
+			listOptions: cluster.ListOptions{},
 		},
 		{
 			name: "watch for synced resource builds watch from store",
-			options: func(ctrl *gomock.Controller, options kubernetes.ListOptions) []Option {
+			options: func(ctrl *gomock.Controller, options cluster.ListOptions) []Option {
 				s := mocks.NewMockStore(ctrl)
 				s.EXPECT().
 					Watch(res, options)
@@ -63,7 +63,7 @@ func TestMemoryStoreInformer_Watch(t *testing.T) {
 			withInformer: func(informer *MemoryStoreInformer) {
 				require.NoError(t, informer.SetSynced(res, nil))
 			},
-			initClient: func(ctrl *gomock.Controller, options kubernetes.ListOptions) kubernetes.Client {
+			initClient: func(ctrl *gomock.Controller, options cluster.ListOptions) cluster.Client {
 				client := mocks.NewMockClient(ctrl)
 				return client
 			},

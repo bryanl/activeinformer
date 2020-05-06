@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"context"
@@ -13,13 +13,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 
-	"github.com/bryanl/activeinformer/internal/stringutil"
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/internal/stringutil"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 type watchDescriptor struct {
 	watch   *UpdatableWatcher
-	options kubernetes.ListOptions
+	options cluster.ListOptions
 }
 
 // Informer represents a cluster MemoryStoreInformer.
@@ -31,16 +31,16 @@ type Informer interface {
 	Stop() error
 	// List list objects from the memory store and falls back to querying the
 	// cluster directly if the resource is not synced.
-	List(ctx context.Context, res schema.GroupVersionResource, options kubernetes.ListOptions) (*unstructured.UnstructuredList, error)
+	List(ctx context.Context, res schema.GroupVersionResource, options cluster.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 // MemoryStoreInformer is an informer that uses a memory store.
 type MemoryStoreInformer struct {
-	client           kubernetes.Client
+	client           cluster.Client
 	synced           map[schema.GroupVersionResource]bool
-	apiWatches       map[schema.GroupVersionResource]kubernetes.Watch
+	apiWatches       map[schema.GroupVersionResource]cluster.Watch
 	watchDescriptors map[schema.GroupVersionResource]watchDescriptor
-	store            kubernetes.Store
+	store            cluster.Store
 	logger           logr.Logger
 
 	mu  sync.RWMutex
@@ -48,10 +48,10 @@ type MemoryStoreInformer struct {
 }
 
 var _ Informer = &MemoryStoreInformer{}
-var _ kubernetes.Client = &MemoryStoreInformer{}
+var _ cluster.Client = &MemoryStoreInformer{}
 
 // NewInformer creates an MemoryStoreInformer.
-func NewInformer(client kubernetes.Client, optionList ...Option) *MemoryStoreInformer {
+func NewInformer(client cluster.Client, optionList ...Option) *MemoryStoreInformer {
 	opts := currentOptions(optionList...)
 
 	maxWorkers := runtime.GOMAXPROCS(0)
@@ -59,7 +59,7 @@ func NewInformer(client kubernetes.Client, optionList ...Option) *MemoryStoreInf
 	i := MemoryStoreInformer{
 		client:           client,
 		synced:           map[schema.GroupVersionResource]bool{},
-		apiWatches:       map[schema.GroupVersionResource]kubernetes.Watch{},
+		apiWatches:       map[schema.GroupVersionResource]cluster.Watch{},
 		watchDescriptors: map[schema.GroupVersionResource]watchDescriptor{},
 		store:            opts.store,
 		logger:           opts.logger.WithValues("component", "MemoryStoreInformer"),
@@ -143,7 +143,7 @@ func (inf *MemoryStoreInformer) Stop() error {
 func (inf *MemoryStoreInformer) List(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options kubernetes.ListOptions) (*unstructured.UnstructuredList, error) {
+	options cluster.ListOptions) (*unstructured.UnstructuredList, error) {
 
 	inf.mu.RLock()
 	defer inf.mu.RUnlock()
@@ -162,8 +162,8 @@ func (inf *MemoryStoreInformer) List(
 func (inf *MemoryStoreInformer) Watch(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options kubernetes.ListOptions) (kubernetes.Watch, error) {
-	var w kubernetes.Watch
+	options cluster.ListOptions) (cluster.Watch, error) {
+	var w cluster.Watch
 
 	if !inf.isResourceSynced(res) {
 		clientWatch, err := inf.client.Watch(ctx, res, options)
@@ -194,7 +194,7 @@ func (inf *MemoryStoreInformer) Watch(
 	return updatableWatcher, nil
 }
 
-func (inf *MemoryStoreInformer) Resources() (kubernetes.Resources, error) {
+func (inf *MemoryStoreInformer) Resources() (cluster.Resources, error) {
 	return inf.client.Resources()
 }
 
@@ -202,7 +202,7 @@ func (inf *MemoryStoreInformer) isResourceSynced(res schema.GroupVersionResource
 	return inf.synced[res]
 }
 
-func (inf *MemoryStoreInformer) SetSynced(res schema.GroupVersionResource, apiWatch kubernetes.Watch) error {
+func (inf *MemoryStoreInformer) SetSynced(res schema.GroupVersionResource, apiWatch cluster.Watch) error {
 	inf.mu.Lock()
 	defer inf.mu.Unlock()
 
@@ -230,8 +230,8 @@ func (inf *MemoryStoreInformer) SetSynced(res schema.GroupVersionResource, apiWa
 
 func (inf *MemoryStoreInformer) setupWatch(
 	ctx context.Context,
-	res schema.GroupVersionResource) (kubernetes.Watch, error) {
-	list, err := inf.client.List(ctx, res, kubernetes.ListOptions{})
+	res schema.GroupVersionResource) (cluster.Watch, error) {
+	list, err := inf.client.List(ctx, res, cluster.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
 	}
@@ -240,7 +240,7 @@ func (inf *MemoryStoreInformer) setupWatch(
 		inf.store.Update(res, &object)
 	}
 
-	w, err := inf.client.Watch(ctx, res, kubernetes.ListOptions{})
+	w, err := inf.client.Watch(ctx, res, cluster.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("watch: %w", err)
 	}
@@ -248,7 +248,7 @@ func (inf *MemoryStoreInformer) setupWatch(
 	return w, nil
 }
 
-func (inf *MemoryStoreInformer) handleWatch(res schema.GroupVersionResource, w kubernetes.Watch) {
+func (inf *MemoryStoreInformer) handleWatch(res schema.GroupVersionResource, w cluster.Watch) {
 	for event := range w.ResultChan() {
 		switch event.Type {
 		case watch.Added:

@@ -1,6 +1,5 @@
-# activeinformer
+# clientkube
 
-Active Informer is a rethink of the Kubernetes informer concept for
-interactive applications.
+A more usable Go client for kubernetes?
 
 Check out a sample in `cmd/tester`

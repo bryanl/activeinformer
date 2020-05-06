@@ -12,8 +12,8 @@ import (
 	"github.com/go-logr/stdr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/bryanl/activeinformer/pkg/activeinformer"
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/pkg/clientkube"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 func main() {
@@ -27,12 +27,12 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kubeconfig, err := activeinformer.FindKubeconfig()
+	kubeconfig, err := clientkube.FindKubeconfig()
 	if err != nil {
 		return fmt.Errorf("find kubeconfig: %w", err)
 	}
 
-	client, err := activeinformer.NewOutOfClusterClient(kubeconfig)
+	client, err := clientkube.NewOutOfClusterClient(kubeconfig)
 	if err != nil {
 		return fmt.Errorf("create out of cluster client: %w", err)
 	}
@@ -43,7 +43,7 @@ func run() error {
 	}
 
 	stdLog := log.New(os.Stderr, "", log.LstdFlags)
-	informer := activeinformer.NewInformer(client, activeinformer.WithLogger(stdr.New(stdLog)))
+	informer := clientkube.NewInformer(client, clientkube.WithLogger(stdr.New(stdLog)))
 
 	if err := informer.Start(ctx); err != nil {
 		return fmt.Errorf("start informer: %w", err)
@@ -67,8 +67,8 @@ func run() error {
 	return nil
 }
 
-func getResources(client kubernetes.Client) (activeinformer.Resources, error) {
-	var resources activeinformer.Resources
+func getResources(client cluster.Client) (cluster.Resources, error) {
+	var resources cluster.Resources
 
 	if err := timeIt(func() error {
 		list, err := client.Resources()
@@ -84,14 +84,14 @@ func getResources(client kubernetes.Client) (activeinformer.Resources, error) {
 	return resources, nil
 }
 
-func getPods(ctx context.Context, informer activeinformer.Informer, resources activeinformer.Resources) error {
+func getPods(ctx context.Context, informer clientkube.Informer, resources cluster.Resources) error {
 
 	podResource, ok := resources.GroupVersionKind(schema.GroupVersionKind{Version: "v1", Kind: "Pod"})
 	if !ok {
 		return fmt.Errorf("there was no pod resource")
 	}
 
-	podList, err := informer.List(ctx, podResource.GroupVersionResource(), kubernetes.ListOptions{})
+	podList, err := informer.List(ctx, podResource.GroupVersionResource(), cluster.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("list pods: %w", err)
 	}

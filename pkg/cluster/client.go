@@ -1,4 +1,4 @@
-package kubernetes
+package cluster
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
-//go:generate mockgen -destination=../mocks/mock_client.go -package mocks github.com/bryanl/activeinformer/pkg/kubernetes Client
+//go:generate mockgen -destination=../mocks/mock_client.go -package mocks github.com/bryanl/clientkube/pkg/cluster Client
 
 // Client represents a Kubernetes cluster client.
 type Client interface {

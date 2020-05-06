@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"fmt"

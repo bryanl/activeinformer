@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 func TestMemoryStore_Update(t *testing.T) {
@@ -213,7 +213,7 @@ func TestMemoryStore_List(t *testing.T) {
 	tests := []struct {
 		name    string
 		res     schema.GroupVersionResource
-		options kubernetes.ListOptions
+		options cluster.ListOptions
 		object  runtime.Object
 		data    memoryStoreData
 		wanted  *unstructured.UnstructuredList
@@ -222,7 +222,7 @@ func TestMemoryStore_List(t *testing.T) {
 		{
 			name:    "list resource",
 			res:     res1,
-			options: kubernetes.ListOptions{},
+			options: cluster.ListOptions{},
 			data: memoryStoreData{
 				res1: memoryStoreResData{
 					storeKey{name: object1.GetName(), namespace: object1.GetNamespace()}: object1,
@@ -237,7 +237,7 @@ func TestMemoryStore_List(t *testing.T) {
 		{
 			name:    "list resource with namespace",
 			res:     res1,
-			options: kubernetes.ListOptions{Namespace: object1.GetNamespace()},
+			options: cluster.ListOptions{Namespace: object1.GetNamespace()},
 			data: memoryStoreData{
 				res1: memoryStoreResData{
 					storeKey{name: object1.GetName(), namespace: object1.GetNamespace()}: object1,
@@ -252,7 +252,7 @@ func TestMemoryStore_List(t *testing.T) {
 		{
 			name:    "list resource that doesn't exist",
 			res:     res2,
-			options: kubernetes.ListOptions{},
+			options: cluster.ListOptions{},
 			data: memoryStoreData{
 				res1: memoryStoreResData{
 					storeKey{name: object1.GetName(), namespace: object1.GetNamespace()}: object1,
@@ -330,7 +330,7 @@ func TestMemoryStore_Watch(t *testing.T) {
 		name    string
 		ops     []storeOp
 		res     schema.GroupVersionResource
-		options kubernetes.ListOptions
+		options cluster.ListOptions
 		wanted  []watch.Event
 	}{
 		{
@@ -353,7 +353,7 @@ func TestMemoryStore_Watch(t *testing.T) {
 				},
 			},
 			res:     res1,
-			options: kubernetes.ListOptions{},
+			options: cluster.ListOptions{},
 			wanted: []watch.Event{
 				{
 					Type:   watch.Modified,
@@ -385,7 +385,7 @@ func TestMemoryStore_Watch(t *testing.T) {
 				},
 			},
 			res: res1,
-			options: kubernetes.ListOptions{
+			options: cluster.ListOptions{
 				Namespace: object2.GetNamespace(),
 			},
 			wanted: []watch.Event{

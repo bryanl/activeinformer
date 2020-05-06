@@ -1,10 +1,10 @@
-package activeinformer
+package clientkube
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 type resource struct {
@@ -15,7 +15,7 @@ type resource struct {
 	isNamespaced     bool
 }
 
-var _ kubernetes.Resource = &resource{}
+var _ cluster.Resource = &resource{}
 
 func newResource(groupVersion schema.GroupVersion, apiResource metav1.APIResource) *resource {
 	r := resource{

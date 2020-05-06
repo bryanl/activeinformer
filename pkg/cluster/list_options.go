@@ -1,4 +1,4 @@
-package kubernetes
+package cluster
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 

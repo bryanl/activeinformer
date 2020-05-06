@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 // OutOfClusterClient is a client that be used out of cluster.
@@ -24,7 +24,7 @@ type OutOfClusterClient struct {
 	discoveryClient *disk.CachedDiscoveryClient
 }
 
-var _ kubernetes.Client = &OutOfClusterClient{}
+var _ cluster.Client = &OutOfClusterClient{}
 
 // NewOutOfClusterClient creates an instance of OutOfClusterClient.
 func NewOutOfClusterClient(kubeconfig string) (*OutOfClusterClient, error) {
@@ -38,7 +38,7 @@ func NewOutOfClusterClient(kubeconfig string) (*OutOfClusterClient, error) {
 		return nil, fmt.Errorf("create cluster client: %w", err)
 	}
 
-	dir, err := ioutil.TempDir("", "activeinformer")
+	dir, err := ioutil.TempDir("", "clientkube")
 	if err != nil {
 		return nil, fmt.Errorf("create temporary directory")
 	}
@@ -76,13 +76,13 @@ func (c *OutOfClusterClient) Close() error {
 }
 
 // Resources lists the resources available in the cluster.
-func (c *OutOfClusterClient) Resources() (kubernetes.Resources, error) {
+func (c *OutOfClusterClient) Resources() (cluster.Resources, error) {
 	resourceLists, err := c.discoveryClient.ServerPreferredResources()
 	if err != nil {
 		return nil, fmt.Errorf("get server preferred resources: %w", err)
 	}
 
-	var list kubernetes.Resources
+	var list cluster.Resources
 
 	for _, resourceList := range resourceLists {
 		groupVersion, err := schema.ParseGroupVersion(resourceList.GroupVersion)
@@ -102,7 +102,7 @@ func (c *OutOfClusterClient) Resources() (kubernetes.Resources, error) {
 func (c *OutOfClusterClient) List(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options kubernetes.ListOptions) (*unstructured.UnstructuredList, error) {
+	options cluster.ListOptions) (*unstructured.UnstructuredList, error) {
 	if options.Namespace == "" {
 		return c.client.Resource(res).List(ctx, options.ListOptions)
 	}
@@ -114,7 +114,7 @@ func (c *OutOfClusterClient) List(
 func (c *OutOfClusterClient) Watch(
 	ctx context.Context,
 	res schema.GroupVersionResource,
-	options kubernetes.ListOptions) (kubernetes.Watch, error) {
+	options cluster.ListOptions) (cluster.Watch, error) {
 	if options.Namespace == "" {
 		return c.client.Resource(res).Watch(ctx, options.ListOptions)
 	}

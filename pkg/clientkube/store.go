@@ -1,4 +1,4 @@
-package activeinformer
+package clientkube
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/watch"
 
-	"github.com/bryanl/activeinformer/pkg/kubernetes"
+	"github.com/bryanl/clientkube/pkg/cluster"
 )
 
 type storeKey struct {
@@ -41,7 +41,7 @@ type MemoryStore struct {
 	mu sync.RWMutex
 }
 
-var _ kubernetes.Store = &MemoryStore{}
+var _ cluster.Store = &MemoryStore{}
 
 // NewMemoryStore creates an instance of MemoryStore.
 func NewMemoryStore(optionList ...Option) *MemoryStore {
@@ -160,7 +160,7 @@ func (s *MemoryStore) Delete(res schema.GroupVersionResource, object runtime.Obj
 
 // List lists objects in a resource.
 // TODO: support all the list option features
-func (s *MemoryStore) List(res schema.GroupVersionResource, options kubernetes.ListOptions) (*unstructured.UnstructuredList, error) {
+func (s *MemoryStore) List(res schema.GroupVersionResource, options cluster.ListOptions) (*unstructured.UnstructuredList, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -188,7 +188,7 @@ func (s *MemoryStore) List(res schema.GroupVersionResource, options kubernetes.L
 	return list, nil
 }
 
-func (s *MemoryStore) Watch(res schema.GroupVersionResource, options kubernetes.ListOptions) (kubernetes.Watch, error) {
+func (s *MemoryStore) Watch(res schema.GroupVersionResource, options cluster.ListOptions) (cluster.Watch, error) {
 	ch := make(chan watch.Event)
 	stopCh := make(chan bool, 1)
 	w := NewWatcher(ch, stopCh)
@@ -223,7 +223,7 @@ func (s *MemoryStore) Watch(res schema.GroupVersionResource, options kubernetes.
 	return w, nil
 }
 
-func (s *MemoryStore) isListOptionMatch(object runtime.Object, options kubernetes.ListOptions) bool {
+func (s *MemoryStore) isListOptionMatch(object runtime.Object, options cluster.ListOptions) bool {
 	accessor, err := meta.Accessor(object)
 	if err != nil {
 		return false

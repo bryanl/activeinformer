@@ -1,4 +1,4 @@
-package kubernetes
+package cluster
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-//go:generate mockgen -destination=../mocks/mock_store.go -package mocks github.com/bryanl/activeinformer/pkg/kubernetes Store
+//go:generate mockgen -destination=../mocks/mock_store.go -package mocks github.com/bryanl/clientkube/pkg/cluster Store
 
 // Store represents the ability to store objects.
 type Store interface {
