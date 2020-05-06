@@ -36,6 +36,18 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 	return m.recorder
 }
 
+// Add mocks base method
+func (m *MockStore) Add(arg0 schema.GroupVersionResource, arg1 runtime.Object) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Add", arg0, arg1)
+}
+
+// Add indicates an expected call of Add
+func (mr *MockStoreMockRecorder) Add(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockStore)(nil).Add), arg0, arg1)
+}
+
 // Delete mocks base method
 func (m *MockStore) Delete(arg0 schema.GroupVersionResource, arg1 runtime.Object) {
 	m.ctrl.T.Helper()

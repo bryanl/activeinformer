@@ -10,6 +10,8 @@ import (
 
 // Store represents the ability to store objects.
 type Store interface {
+	// Add adds an object to a group/version/resource.
+	Add(res schema.GroupVersionResource, object runtime.Object)
 	// Update updates the object given a group/version/resource.
 	Update(res schema.GroupVersionResource, object runtime.Object)
 	// Update deletes the object given a group/version/resource.

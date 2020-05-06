@@ -251,7 +251,9 @@ func (inf *MemoryStoreInformer) setupWatch(
 func (inf *MemoryStoreInformer) handleWatch(res schema.GroupVersionResource, w kubernetes.Watch) {
 	for event := range w.ResultChan() {
 		switch event.Type {
-		case watch.Added, watch.Modified:
+		case watch.Added:
+			inf.store.Add(res, event.Object)
+		case watch.Modified:
 			inf.store.Update(res, event.Object)
 		case watch.Deleted:
 			inf.store.Delete(res, event.Object)

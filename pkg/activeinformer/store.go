@@ -57,8 +57,30 @@ func NewMemoryStore(optionList ...Option) *MemoryStore {
 	return &s
 }
 
+// Add adds an object to the memory store.
+func (s *MemoryStore) Add(res schema.GroupVersionResource, object runtime.Object) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	u, ok := object.(*unstructured.Unstructured)
+	if !ok {
+		s.logger.Info("store update only works with unstructured objects",
+			"got", fmt.Sprintf("%T", object))
+		return
+	}
+
+	m, ok := s.data[res]
+	if !ok {
+		m = memoryStoreResData{}
+	}
+
+	m[s.key(u)] = u
+	s.data[res] = m
+
+	s.sendUpdate(res, object, watch.Added)
+}
+
 // Update updates the object in the memory store.
-// TODO: create Add
 func (s *MemoryStore) Update(res schema.GroupVersionResource, object runtime.Object) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
